@@ -6,9 +6,9 @@
 //!
 //! # Compress example:
 //! ```
-//! let comp = flate3::Compressor::new();
+//! let mut comp = flate3::Compressor::new();
 //! let data = [ 1,2,3,4,1,2,3 ];
-//! let cb : Vec<u8> = comp.deflate( &data, &mut c );
+//! let cb : Vec<u8> = comp.deflate( &data );
 //! println!( "compressed size={}", cb.len() );
 //!```
 //!
