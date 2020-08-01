@@ -4,18 +4,14 @@
 //!
 //! It uses multiple threads to compress faster. 
 //!
-//! # Compress example:
+//! # Example:
 //! ```
 //! let mut comp = flate3::Compressor::new();
 //! let data = [ 1,2,3,4,1,2,3 ];
 //! let cb : Vec<u8> = comp.deflate( &data );
 //! println!( "compressed size={}", cb.len() );
-//!```
-//!
-//! # Inflate ( de-compress) example:
-//! ```
 //! let uc : Vec<u8> = flate3::inflate( &cb );
-//! println!( "de-compressed size={}", ub.len() );
+//! println!( "de-compressed size={}", uc.len() );
 //! ```
 
 use crossbeam::{channel,Receiver,Sender};
