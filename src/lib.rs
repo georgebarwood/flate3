@@ -74,6 +74,14 @@ impl Compressor
   }
 }
 
+impl Default for Compressor 
+{
+  fn default() -> Self 
+  {
+    Self::new()
+  }
+}
+
 fn write_blocks( inp: &[u8], mrx: Receiver<Match>, crx: Receiver<u32>, out: &mut BitStream, opt: &Options )
 {
   out.write( 16, 0x9c78 );
