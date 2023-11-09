@@ -1,6 +1,6 @@
 [package]
 name = "flate3"
-version = "0.1.0"
+version = "0.1.22"
 authors = ["George Barwood"]
 edition = "2018"
 description = "High-performance RFC 1952 compression and de-compression"
