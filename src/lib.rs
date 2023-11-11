@@ -65,9 +65,9 @@ impl Compressor
     // Execute the match finding, checksum computation and block output in parallel using the scoped thread pool.
     self.pool.scoped( |s| 
     {
-      if opt.matching { s.execute( || { find_matches( inp, mtx , &opt ); } ); }
-      s.execute( || { ctx.send( adler32( &inp ) ).unwrap(); } );
-      write_blocks( inp, mrx, crx, &mut out, &opt );
+      if opt.matching { s.execute( || { find_matches( inp, mtx , opt ); } ); }
+      s.execute( || { ctx.send( adler32( inp ) ).unwrap(); } );
+      write_blocks( inp, mrx, crx, &mut out, opt );
     } );
 
     out.bytes
@@ -99,7 +99,7 @@ fn write_blocks( inp: &[u8], mrx: Receiver<Match>, crx: Receiver<u32>, out: &mut
 
     let mut b = Block::new( block_start, block_size, match_start );
     if opt.matching{ match_position = get_matches( match_position, b.input_end, &mrx, &mut mlist ); }
-    b.init( &inp, &mlist );
+    b.init( inp, &mlist );
 
     if opt.dynamic_block_size // Investigate larger block size.
     {
@@ -113,11 +113,11 @@ fn write_blocks( inp: &[u8], mrx: Receiver<Match>, crx: Receiver<u32>, out: &mut
         if block_size > target_size { block_size = target_size; }
         let mut b2 = Block::new( b.input_end, block_size, b.match_end );
         match_position = get_matches( match_position, b2.input_end, &mrx, &mut mlist );
-        b2.init( &inp, &mlist );
+        b2.init( inp, &mlist );
 
         // b3 covers b and b2 exactly as one block.
         let mut b3 = Block::new( b.input_start, b2.input_end - b.input_start, b.match_start );
-        b3.init( &inp, &mlist );
+        b3.init( inp, &mlist );
 
         let bits2 = b2.bit_size( out );
         let bits3 = b3.bit_size( out ); 
@@ -137,7 +137,7 @@ fn write_blocks( inp: &[u8], mrx: Receiver<Match>, crx: Receiver<u32>, out: &mut
 
     // println!( "block size={} start={} end={}", b.input_end - b.input_start, b.input_start, b.input_end );
 
-    b.write( &inp, &mlist, out, block_start == len );
+    b.write( inp, &mlist, out, block_start == len );
     if b.input_end == len { break; }
   }   
   out.pad(8);
@@ -299,7 +299,7 @@ impl Matcher
   // best_match finds the best match starting at position. 
   // old_position is from hash table, link [] is linked list of older positions.
 
-  fn best_match( &mut self, input: &[u8], position: usize, mut old_position: usize, link: &mut Vec<usize> ) -> ( usize, usize )
+  fn best_match( &mut self, input: &[u8], position: usize, mut old_position: usize, link: &mut [usize] ) -> ( usize, usize )
   { 
     let mut avail = input.len() - position;
     if avail > MAX_MATCH { avail = MAX_MATCH; }
@@ -578,7 +578,7 @@ impl BitCoder
     const IDMASK : u64 = ( 1 << IDBITS ) - 1;
 
     // First compute the number of bits to encode each symbol (self.bits), using a Heap.
-    let mut heap = Heap::<u64>::new( self.symbols as usize );
+    let mut heap = Heap::<u64>::new( self.symbols );
 
     // Add the leaf nodes to the heap.
     for id in 0..self.symbols
@@ -1116,7 +1116,7 @@ impl<T: Ord+Copy> Heap<T> // Ord+Copy means T can be compared and copied.
 
 pub fn inflate( data: &[u8] ) -> Vec<u8>
 {
-  let mut input = InputBitStream::new( &data );
+  let mut input = InputBitStream::new( data );
   let mut output = Vec::with_capacity( 2 * data.len() );
   let _flags = input.get_bits( 16 );
   loop
