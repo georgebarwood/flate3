@@ -6,9 +6,8 @@
 //!
 //! # Example:
 //! ```
-//! let mut comp = flate3::Compressor::new();
 //! let data = [ 1,2,3,4,1,2,3 ];
-//! let cb : Vec<u8> = comp.deflate( &data );
+//! let cb : Vec<u8> = flate3::deflate( &data );
 //! println!( "compressed size={}", cb.len() );
 //! let uc : Vec<u8> = flate3::inflate( &cb );
 //! println!( "de-compressed size={}", uc.len() );
@@ -16,6 +15,13 @@
 //! ```
 
 use crossbeam::{channel,channel::{Receiver,Sender}};
+use std::thread;
+
+pub fn deflate( data: &[u8] ) -> Vec<u8>
+{
+  let mut c = Compressor::new();
+  c.deflate(data)
+} 
 
 /// Compression options.
 pub struct Options
@@ -28,11 +34,10 @@ pub struct Options
   pub match_channel_size: usize
 }
 
-/// Holds compression options and scoped thread pool.
+/// Holds compression options.
 pub struct Compressor
 {
   pub options: Options,
-  pub pool: scoped_threadpool::Pool
 }
 
 impl Compressor
@@ -50,7 +55,6 @@ impl Compressor
         lazy_match: true,
         match_channel_size: 1000 
       },
-      pool: scoped_threadpool::Pool::new(2)
     }
   }
 
@@ -62,11 +66,11 @@ impl Compressor
     let ( mtx, mrx ) = channel::bounded( opt.match_channel_size ); // channel for matches
     let ( ctx, crx ) = channel::bounded( 1 ); // channel for checksum
 
-    // Execute the match finding, checksum computation and block output in parallel using the scoped thread pool.
-    self.pool.scoped( |s| 
+    // Execute the match finding, checksum computation and block output in parallel.
+    thread::scope( |s| 
     {
-      if opt.matching { s.execute( || { find_matches( inp, mtx , opt ); } ); }
-      s.execute( || { ctx.send( adler32( inp ) ).unwrap(); } );
+      if opt.matching { s.spawn( || { find_matches( inp, mtx , opt ); } ); }
+      s.spawn( || { ctx.send( adler32( inp ) ).unwrap(); } );
       write_blocks( inp, mrx, crx, &mut out, opt );
     } );
 
