@@ -14,7 +14,7 @@
 //! assert!( uc == &data );
 //! ```
 
-use crossbeam::{channel,channel::{Receiver,Sender}};
+use std::sync::mpsc::{channel,Sender,Receiver};
 use std::thread;
 
 pub fn deflate( data: &[u8] ) -> Vec<u8>
@@ -63,8 +63,8 @@ impl Compressor
   {
     let opt = &self.options;
     let mut out = BitStream::new( inp.len() );
-    let ( mtx, mrx ) = channel::bounded( opt.match_channel_size ); // channel for matches
-    let ( ctx, crx ) = channel::bounded( 1 ); // channel for checksum
+    let ( mtx, mrx ) = channel(); // channel for matches
+    let ( ctx, crx ) = channel(); // channel for checksum
 
     // Execute the match finding, checksum computation and block output in parallel.
     thread::scope( |s| 
