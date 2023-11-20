@@ -17,6 +17,7 @@
 use std::sync::mpsc::{channel,Sender,Receiver};
 use std::thread;
 
+/// Compress with default options.
 pub fn deflate( data: &[u8] ) -> Vec<u8>
 {
   let mut c = Compressor::new();
@@ -26,22 +27,30 @@ pub fn deflate( data: &[u8] ) -> Vec<u8>
 /// Compression options.
 pub struct Options
 {
+  /// Enable dynamic block sizes, can increase compression.
   pub dynamic_block_size: bool,
+  /// Block size.
   pub block_size: usize,
+  /// Enable matching.
   pub matching: bool,
+  /// Limits search for longest match. 
   pub probe_max: usize, 
+  /// Enable "lazy matching" per RFC 1951 p.15.
   pub lazy_match: bool,
+  /// Not currently used.
   pub match_channel_size: usize
 }
 
-/// Holds compression options.
+/// Holds compression options ( this struct used to hold a thread pool as well ).
 pub struct Compressor
 {
+  /// Compression options.
   pub options: Options,
 }
 
 impl Compressor
 {
+  /// Construct a new Compressor with default options.
   pub fn new() -> Compressor
   {
     Compressor
