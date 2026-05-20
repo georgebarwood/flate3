@@ -14,7 +14,8 @@
 //! assert!( uc == &data );
 //! ```
 
-use std::sync::mpsc::{channel,Sender,Receiver};
+#![deny(missing_docs)]
+use std::sync::mpsc;
 use std::thread;
 
 /// Compress with default options.
@@ -72,8 +73,8 @@ impl Compressor
   {
     let opt = &self.options;
     let mut out = BitStream::new( inp.len() );
-    let ( mtx, mrx ) = channel(); // channel for matches
-    let ( ctx, crx ) = channel(); // channel for checksum
+    let ( mtx, mrx ) = bchan::channel(1024); // channel for matches
+    let ( ctx, crx ) = mpsc::channel(); // channel for checksum
 
     // Execute the match finding, checksum computation and block output in parallel.
     thread::scope( |s| 
@@ -95,7 +96,7 @@ impl Default for Compressor
   }
 }
 
-fn write_blocks( inp: &[u8], mrx: Receiver<Match>, crx: Receiver<u32>, out: &mut BitStream, opt: &Options )
+fn write_blocks( inp: &[u8], mut mrx: bchan::Receiver<Match>, crx: mpsc::Receiver<u32>, out: &mut BitStream, opt: &Options )
 {
   out.write( 16, 0x9c78 );
 
@@ -111,7 +112,7 @@ fn write_blocks( inp: &[u8], mrx: Receiver<Match>, crx: Receiver<u32>, out: &mut
     if block_size > target_size { block_size = target_size; }
 
     let mut b = Block::new( block_start, block_size, match_start );
-    if opt.matching{ match_position = get_matches( match_position, b.input_end, &mrx, &mut mlist ); }
+    if opt.matching{ match_position = get_matches( match_position, b.input_end, &mut mrx, &mut mlist ); }
     b.init( inp, &mlist );
 
     if opt.dynamic_block_size // Investigate larger block size.
@@ -125,7 +126,7 @@ fn write_blocks( inp: &[u8], mrx: Receiver<Match>, crx: Receiver<u32>, out: &mut
         target_size = b.input_end - b.input_start;
         if block_size > target_size { block_size = target_size; }
         let mut b2 = Block::new( b.input_end, block_size, b.match_end );
-        match_position = get_matches( match_position, b2.input_end, &mrx, &mut mlist );
+        match_position = get_matches( match_position, b2.input_end, &mut mrx, &mut mlist );
         b2.init( inp, &mlist );
 
         // b3 covers b and b2 exactly as one block.
@@ -159,18 +160,18 @@ fn write_blocks( inp: &[u8], mrx: Receiver<Match>, crx: Receiver<u32>, out: &mut
 }
 
 /// Get matches up to position.
-fn get_matches( mut match_position: usize, to_position: usize, mrx: &Receiver<Match>, mlist: &mut Vec<Match> ) -> usize
+fn get_matches( mut match_position: usize, to_position: usize, mrx: &mut bchan::Receiver<Match>, mlist: &mut Vec<Match> ) -> usize
 {
   while match_position < to_position 
   {
     match mrx.recv()
     {
-      Ok( m ) => 
+      Some( m ) => 
       {
         match_position = m.position;
         mlist.push( m );          
       },
-      Err( _err ) => match_position = usize::MAX
+      None => match_position = usize::MAX
     }
   }
   match_position
@@ -198,7 +199,7 @@ struct Match
   pub distance: u16
 }
 
-fn find_matches( input: &[u8], output: Sender<Match>, opts: &Options )
+fn find_matches( input: &[u8], output: bchan::Sender<Match>, opts: &Options )
 {
   let len = input.len();
   if len > MIN_MATCH
@@ -239,7 +240,7 @@ impl Matcher
     } 
   }
 
-  fn find( &mut self, input: &[u8], output: Sender<Match> ) // LZ77 compression.
+  fn find( &mut self, input: &[u8], mut output: bchan::Sender<Match> ) // LZ77 compression.
   {
     let limit = input.len() - 2;
 
@@ -291,7 +292,7 @@ impl Matcher
         else { break; }
       }
 
-      output.send( Match{ position:position-1, length:match1 as u16, distance:distance1 as u16 } ).unwrap();
+      output.send( Match{ position:position-1, length:match1 as u16, distance:distance1 as u16 } );
 
       let mut copy_end = position - 1 + match1;
       if copy_end > limit { copy_end = limit; }
@@ -960,7 +961,6 @@ impl BitStream
 
   /// Write first n bits of value to BitStream, least significant bit is written first.
   /// Unused bits of value must be zero, i.e. value must be in range 0 .. 2^n-1.
-
   pub fn write( &mut self, mut n: u8, mut value: u64 )
   {
     if n + self.bits_in_buffer >= 64
@@ -1126,7 +1126,6 @@ impl<T: Ord+Copy> Heap<T> // Ord+Copy means T can be compared and copied.
 //*******************************************************************************
 
 /// RFC 1951 inflate ( de-compress ).
-
 pub fn inflate( data: &[u8] ) -> Vec<u8>
 {
   let mut input = InputBitStream::new( data );
@@ -1381,7 +1380,7 @@ struct InputBitStream<'data>
 
 impl <'data> InputBitStream<'data>
 {
-  fn new( data: &'data [u8] ) -> InputBitStream
+  fn new( data: &'data [u8] ) -> InputBitStream<'data>
   {
     InputBitStream { data, pos: 0, buf: 0, got: 0 }
   } 
@@ -1611,7 +1610,7 @@ const fn get_off_code( x: u16 ) -> usize {
   } else {
     LUT[ x as usize ] as usize
   }
-}    
+}   
 
 // Rest is commented out alternative methods for get_off_code and get_dist_code.
 
