@@ -1,6 +1,6 @@
 [package]
 name = "flate3"
-version = "1.0.3"
+version = "1.0.5"
 authors = ["George Barwood"]
 categories = ["compression"]
 edition = "2021"
@@ -8,4 +8,5 @@ description = "High-performance RFC 1952 compression and de-compression"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/georgebarwood/flate3/"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.htm
+[dependencies]
+bchan = "1.0.0"
