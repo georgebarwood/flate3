@@ -178,7 +178,7 @@ fn get_matches( mut match_position: usize, to_position: usize, mrx: &mut bchan::
 }
 
 /// Checksum function per RFC 1950.
-fn adler32( input: &[u8] ) -> u32
+pub fn adler32( input: &[u8] ) -> u32
 {
   let mut s1 = 1;
   let mut s2 = 0;
