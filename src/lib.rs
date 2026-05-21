@@ -18,6 +18,9 @@
 use std::sync::mpsc;
 use std::thread;
 
+use pstd::{veca,localalloc::Local};
+type LVec<T> = pstd::VecA<T, Local>;
+
 /// Compress with default options.
 pub fn deflate( data: &[u8] ) -> Vec<u8>
 {
@@ -63,7 +66,7 @@ impl Compressor
         matching: true,
         probe_max: 10, 
         lazy_match: true,
-        match_channel_size: 1000 
+        match_channel_size: 0x400 
       },
     }
   }
@@ -73,7 +76,7 @@ impl Compressor
   {
     let opt = &self.options;
     let mut out = BitStream::new( inp.len() );
-    let ( mtx, mrx ) = bchan::channel(1024); // channel for matches
+    let ( mtx, mrx ) = bchan::channel(opt.match_channel_size); // channel for matches
     let ( ctx, crx ) = mpsc::channel(); // channel for checksum
 
     // Execute the match finding, checksum computation and block output in parallel.
@@ -104,7 +107,7 @@ fn write_blocks( inp: &[u8], mut mrx: bchan::Receiver<Match>, crx: mpsc::Receive
   let mut block_start = 0; // start of next block
   let mut match_start = 0; // start of matches for next block
   let mut match_position = 0; // latest match position
-  let mut mlist : Vec<Match> = Vec::new(); // list of matches
+  let mut mlist : LVec<Match> = LVec::new(); // list of matches
   loop
   {
     let mut block_size = len - block_start;
@@ -160,7 +163,7 @@ fn write_blocks( inp: &[u8], mut mrx: bchan::Receiver<Match>, crx: mpsc::Receive
 }
 
 /// Get matches up to position.
-fn get_matches( mut match_position: usize, to_position: usize, mrx: &mut bchan::Receiver<Match>, mlist: &mut Vec<Match> ) -> usize
+fn get_matches( mut match_position: usize, to_position: usize, mrx: &mut bchan::Receiver<Match>, mlist: &mut LVec<Match> ) -> usize
 {
   while match_position < to_position 
   {
@@ -219,7 +222,7 @@ struct Matcher
 {
   hash_shift: usize,
   hash_mask: usize,
-  hash_table: Vec<usize>,
+  hash_table: LVec<usize>,
   probe_max: usize, 
   lazy_match: bool
 }
@@ -234,7 +237,7 @@ impl Matcher
     Matcher{
       hash_shift,
       hash_mask,
-      hash_table: vec![ 0; hash_mask + 1 ],
+      hash_table: veca![ 0; hash_mask + 1 ],
       probe_max: opts.probe_max,
       lazy_match: opts.lazy_match
     } 
@@ -244,7 +247,7 @@ impl Matcher
   {
     let limit = input.len() - 2;
 
-    let mut link : Vec<usize> = vec!(0; limit);
+    let mut link : LVec<usize> = veca!(0; limit);
 
     let mut position = 0; // position in input.
 
@@ -549,13 +552,13 @@ impl Block
 struct BitCoder
 {
   pub symbols: usize,  // Number of symbols to be encoded (input/output).
-  pub used: Vec<u32>,  // Number of times each symbol is used in the block being encoded ( input ).
-  pub bits: Vec<u8>,   // Number of bits used to encode each symbol ( output ).
-  pub code: Vec<u16>,  // Code for each symbol (output).
+  pub used: LVec<u32>,  // Number of times each symbol is used in the block being encoded ( input ).
+  pub bits: LVec<u8>,   // Number of bits used to encode each symbol ( output ).
+  pub code: LVec<u16>,  // Code for each symbol (output).
 
   lim_bits: usize,  // Limit on code length ( 15 or 7 for RFC 1951 ).
   max_bits: usize,  // Maximum code length.
-  left: Vec<u16>, right: Vec<u16>, // Tree storage.
+  left: LVec<u16>, right: LVec<u16>, // Tree storage.
 }
 
 impl BitCoder
@@ -567,11 +570,11 @@ impl BitCoder
       symbols,
       lim_bits, 
       max_bits: 0,
-      used:  vec![0;symbols],
-      bits:  vec![0;symbols],
-      left:  vec![0;symbols],
-      right: vec![0;symbols],
-      code:  Vec::with_capacity( symbols ),
+      used:  veca![0;symbols],
+      bits:  veca![0;symbols],
+      left:  veca![0;symbols],
+      right: veca![0;symbols],
+      code:  LVec::with_capacity( symbols ),
     }
   }
 
@@ -688,11 +691,11 @@ impl BitCoder
     let tree_size = self.symbols * self.lim_bits;
 
     // Tree storage.
-    self.left = vec![ 0; tree_size ];
-    self.right = vec![ 0; tree_size ];
+    self.left = veca![ 0; tree_size ];
+    self.right = veca![ 0; tree_size ];
 
     // First create the leaf nodes for the tree and sort.
-    let mut leaves : Vec<u64> = Vec::with_capacity( non_zero );
+    let mut leaves : LVec<u64> = LVec::with_capacity( non_zero );
 
     for i in 0..self.symbols
     {
@@ -704,8 +707,8 @@ impl BitCoder
     }
     leaves.sort();
 
-    let mut merged = Vec::<u64>::with_capacity( self.symbols );
-    let mut next = Vec::<u64>::with_capacity( self.symbols );
+    let mut merged = LVec::<u64>::with_capacity( self.symbols );
+    let mut next = LVec::<u64>::with_capacity( self.symbols );
 
     let mut package : usize = self.symbols; // Allocator for package (tree node) ids.
 
@@ -794,14 +797,14 @@ impl BitCoder
     // Code below is from RFC 1951 page 7.
 
     // bl_count[N] is the number of symbols encoded with N bits.
-    let mut bl_count : Vec<u16> = vec![ 0; self.max_bits + 1 ];
+    let mut bl_count : LVec<u16> = veca![ 0; self.max_bits + 1 ];
     for sym in 0..self.symbols
     {
       bl_count[ self.bits[ sym ] as usize ] += 1; 
     }
 
     // Find the numerical value of the smallest code for each code length.
-    let mut next_code : Vec<u16> = Vec::with_capacity( self.max_bits + 1 );
+    let mut next_code : LVec<u16> = LVec::with_capacity( self.max_bits + 1 );
     let mut code : u16 = 0; 
     bl_count[ 0 ] = 0;
     next_code.push( 0 );
@@ -1006,7 +1009,7 @@ impl BitStream
 //*******************************************************************************
 
 /// Heap is an array organised so the smallest element can be efficiently removed.
-struct Heap<T>{ vec: Vec<T> }
+struct Heap<T>{ vec: LVec<T> }
 
 impl<T: Ord+Copy> Heap<T> // Ord+Copy means T can be compared and copied.
 {
@@ -1022,7 +1025,7 @@ impl<T: Ord+Copy> Heap<T> // Ord+Copy means T can be compared and copied.
   /// Create a new heap.
   pub fn new( capacity : usize ) -> Heap<T>
   {
-    Heap{ vec: Vec::with_capacity( capacity ) }
+    Heap{ vec: LVec::with_capacity( capacity ) }
   }
 
   /// Get the number of elements in the heap.
@@ -1200,10 +1203,10 @@ fn copy( output: &mut Vec<u8>, distance: usize, mut length: usize )
 struct BitDecoder
 {
   nsym: usize, // The number of symbols.
-  bits: Vec<u8>, // The length in bits of the code that represents each symbol.
+  bits: LVec<u8>, // The length in bits of the code that represents each symbol.
   maxbits: usize, // The length in bits of the longest code.
   peekbits: usize, // The bit length for the first lookup ( not greater than PEEK ).
-  lookup: Vec<usize> // The table used to look up a symbol from a code.
+  lookup: LVec<usize> // The table used to look up a symbol from a code.
 }
 
 /// Maximum number of bits for first lookup.
@@ -1216,10 +1219,10 @@ impl BitDecoder
     BitDecoder 
     { 
       nsym,
-      bits: vec![0; nsym],
+      bits: veca![0; nsym],
       maxbits: 0,
       peekbits: 0,
-      lookup: Vec::new()
+      lookup: LVec::new()
     }
   }
 
@@ -1253,11 +1256,11 @@ impl BitDecoder
     // Code below is from rfc1951 page 7.
 
     // bl_count is the number of codes of length N, N >= 1.
-    let mut bl_count : Vec<usize> = vec![ 0; max_bits + 1 ];
+    let mut bl_count : LVec<usize> = veca![ 0; max_bits + 1 ];
 
     for sym in 0..self.nsym { bl_count[ self.bits[ sym ] as usize ] += 1; }
 
-    let mut next_code : Vec<usize> = vec![ 0; max_bits + 1 ];
+    let mut next_code : LVec<usize> = veca![ 0; max_bits + 1 ];
     let mut code = 0; 
     bl_count[ 0 ] = 0;
 
