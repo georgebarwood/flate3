@@ -1,6 +1,6 @@
 [package]
 name = "flate3"
-version = "1.2.1"
+version = "1.2.2"
 authors = ["George Barwood"]
 categories = ["compression"]
 edition = "2021"
@@ -10,3 +10,4 @@ repository = "https://github.com/georgebarwood/flate3/"
 
 [dependencies]
 bchan = "1.0.0"
+pstd = "1.0.134"
