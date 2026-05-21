@@ -11,3 +11,14 @@ repository = "https://github.com/georgebarwood/flate3/"
 [dependencies]
 bchan = "1.0.0"
 pstd = "1.0.134"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+lz4_flex = "0.11"
+zstd = "0.13"
+flate2 = "1"
+miniz_oxide = "0.8"
+
+[[bench]]
+name = "compress"
+harness = false
