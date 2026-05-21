@@ -1,6 +1,6 @@
 [package]
 name = "flate3"
-version = "1.2.2"
+version = "1.2.3"
 authors = ["George Barwood"]
 categories = ["compression"]
 edition = "2021"
