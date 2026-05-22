@@ -1129,8 +1129,13 @@ impl<T: Ord + Copy> Heap<T> // Ord+Copy means T can be compared and copied.
 
 //*******************************************************************************
 
-/// RFC 1951 inflate ( de-compress ).
+/// RFC 1951 inflate ( de-compress ). Does not check checksum.
 pub fn inflate(data: &[u8]) -> Vec<u8> {
+    inflate_with(data, false)
+}
+
+/// Inflate, panic if check and checksum error.
+pub fn inflate_with(data: &[u8], check: bool) -> Vec<u8> {
     let mut input = InputBitStream::new(data);
     let mut output = Vec::with_capacity(6 * data.len());
     let _flags = input.get_bits(16);
@@ -1149,10 +1154,10 @@ pub fn inflate(data: &[u8]) -> Vec<u8> {
     }
     // Check the checksum.
     input.pad(8);
-    let _check_sum = input.get_bits(32) as u32;
-    //if adler32(&output) != check_sum {
-    //    panic!("Bad checksum")
-    //}
+    let check_sum = input.get_bits(32) as u32;
+    if check && adler32(&output) != check_sum {
+        panic!("Bad checksum")
+    }
     output
 }
 
@@ -1186,12 +1191,20 @@ fn dyn_block(input: &mut InputBitStream, output: &mut Vec<u8>) {
 } // end do_dyn
 
 /// Copy length bytes from output ( at specified distance ) to output.
-fn copy(output: &mut Vec<u8>, distance: usize, mut length: usize) {
-    let mut i = output.len() - distance;
-    while length > 0 {
-        output.push(output[i]);
-        i += 1;
-        length -= 1;
+fn copy(output: &mut Vec<u8>, distance: usize, length: usize) {
+    if distance >= length
+    // No overlap
+    {
+        let i = output.len() - distance;
+        let end = i + length;
+        output.extend_from_within(i..end);
+    } else {
+        let mut i = output.len() - distance;
+        let end = i + length;
+        while i < end {
+            output.push(output[i]);
+            i += 1;
+        }
     }
 }
 
@@ -1426,7 +1439,7 @@ impl<'data> InputBitStream<'data> {
 
     // Get n bits of input, reversed.
     fn get_huff(&mut self, n: usize) -> usize {
-        reverse( self.get_bits(n), n )
+        reverse(self.get_bits(n), n)
     }
 
     // Move to n-bit boundary ( n a power of 2 ).
@@ -1437,10 +1450,9 @@ impl<'data> InputBitStream<'data> {
 
 /// Reverse a string of n bits.
 fn reverse(x: usize, n: usize) -> usize {
-    const UNB : usize = 8 * size_of::<usize>();
     let mut result = x.reverse_bits();
-    if n > 0 { 
-        result = result >> ( UNB - n ) 
+    if n > 0 {
+        result >>= usize::BITS as usize - n
     };
     result
 }
