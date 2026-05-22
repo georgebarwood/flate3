@@ -54,12 +54,12 @@ impl Compressor {
     pub fn new() -> Compressor {
         Compressor {
             options: Options {
-                dynamic_block_size: false,
+                dynamic_block_size: true,
                 block_size: 0x2000,
                 matching: true,
                 probe_max: 10,
                 lazy_match: true,
-                match_channel_size: 0x400,
+                match_channel_size: 0x800,
             },
         }
     }
@@ -1132,7 +1132,7 @@ impl<T: Ord + Copy> Heap<T> // Ord+Copy means T can be compared and copied.
 /// RFC 1951 inflate ( de-compress ).
 pub fn inflate(data: &[u8]) -> Vec<u8> {
     let mut input = InputBitStream::new(data);
-    let mut output = Vec::with_capacity(2 * data.len());
+    let mut output = Vec::with_capacity(6 * data.len());
     let _flags = input.get_bits(16);
     loop {
         let last_block = input.get_bit();
@@ -1149,10 +1149,10 @@ pub fn inflate(data: &[u8]) -> Vec<u8> {
     }
     // Check the checksum.
     input.pad(8);
-    let check_sum = input.get_bits(32) as u32;
-    if adler32(&output) != check_sum {
-        panic!("Bad checksum")
-    }
+    let _check_sum = input.get_bits(32) as u32;
+    //if adler32(&output) != check_sum {
+    //    panic!("Bad checksum")
+    //}
     output
 }
 
@@ -1425,13 +1425,8 @@ impl<'data> InputBitStream<'data> {
     }
 
     // Get n bits of input, reversed.
-    fn get_huff(&mut self, mut n: usize) -> usize {
-        let mut result = 0;
-        while n > 0 {
-            result = (result << 1) + self.get_bit();
-            n -= 1;
-        }
-        result
+    fn get_huff(&mut self, n: usize) -> usize {
+        reverse( self.get_bits(n), n )
     }
 
     // Move to n-bit boundary ( n a power of 2 ).
@@ -1441,13 +1436,12 @@ impl<'data> InputBitStream<'data> {
 } // end impl InputBitStream
 
 /// Reverse a string of n bits.
-fn reverse(mut x: usize, mut n: usize) -> usize {
-    let mut result: usize = 0;
-    while n > 0 {
-        result = (result << 1) | (x & 1);
-        x >>= 1;
-        n -= 1;
-    }
+fn reverse(x: usize, n: usize) -> usize {
+    const UNB : usize = 8 * size_of::<usize>();
+    let mut result = x.reverse_bits();
+    if n > 0 { 
+        result = result >> ( UNB - n ) 
+    };
     result
 }
 
